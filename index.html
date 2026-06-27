@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex Chronologique d'Ornyrak</title>
+
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+   CODEX CHRONOLOGIQUE D'ORNYRAK
+   Frise interactive pour jeu de rôle — fichier HTML autonome (HTML+CSS+JS)
+  ════════════════════════════════════════════════════════════════════════════
+
+   SOMMAIRE DU FICHIER
+   ───────────────────
+   1. POLICES        ........ <link> Google Fonts (Cinzel + EB Garamond)
+   2. STYLES (CSS)   ........ tout dans la balise <style> ci-dessous
+                              → variables couleurs en haut (zone "PALETTE")
+   3. STRUCTURE (HTML) ...... en-tête, barre d'outils, panneau, scène, fenêtre
+   4. DONNÉES (JS)   ........ tableau « events » + dictionnaire « CATEGORIES »
+                              → C'EST LA SEULE PARTIE À MODIFIER AU QUOTIDIEN
+   5. MOTEUR (JS)    ........ rendu, zoom, déplacement, filtres, recherche…
+
+   POUR MODIFIER :
+   • Ajouter / éditer des événements  → bloc « DONNÉES » → tableau « events »
+   • Renommer / recolorier une catégorie → bloc « DONNÉES » → objet « CATEGORIES »
+   • Changer les couleurs globales      → bloc « PALETTE » (variables :root)
+   • Régler l'échelle, le zoom, etc.    → bloc « RÉGLAGES » (constante CONFIG)
+  ════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- 1. POLICES ─────────────────────────────────────────────────────────────
+     Cinzel  = capitales lapidaires, effet « manuscrit / inscription »
+     EB Garamond = corps de texte, lisible et élégant
+     Remplace ces familles ici ET dans les variables --police-* si tu changes. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cinzel+Decorative:wght@700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+<style>
+/* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  PALETTE — modifie ces valeurs pour reteindre tout le codex            ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+:root{
+  /* — Couleurs de base — */
+  --parchemin:        #e7d8b5; /* fond parchemin clair          */
+  --parchemin-fonce:  #d8c499; /* zones creusées / ombres        */
+  --parchemin-bord:   #c2a96f; /* lisérés                        */
+  --ivoire:           #f6f0e0; /* surfaces claires (fenêtre)     */
+  --bronze:           #8a6a3c; /* métal, traits, contours        */
+  --bronze-clair:     #b08c54;
+  --or:               #c8a02a; /* accents dorés, surbrillances   */
+  --or-clair:         #e3c45a;
+  --bleu-nuit:        #1a2541; /* texte fort, bandeaux profonds  */
+  --bleu-nuit-clair:  #2c3a63;
+  --encre:            #3a2c1a; /* couleur de texte courante      */
+  --encre-pale:       #6b5638;
+
+  /* — Polices (voir <link> plus haut) — */
+  --police-titre: 'Cinzel', 'Cinzel Decorative', Georgia, serif;
+  --police-corps: 'EB Garamond', Georgia, 'Times New Roman', serif;
+
+  /* — Mesures de l'interface — */
+  --rayon: 6px;
+  --ombre-douce: 0 2px 10px rgba(40,28,12,.25);
+  --ombre-forte: 0 14px 40px rgba(20,14,6,.45);
+  --largeur-panneau: 320px;
+}
+
+/* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  BASE                                                                  ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+*{ box-sizing:border-box; }
+html,body{ height:100%; margin:0; }
+body{
+  font-family:var(--police-corps);
+  color:var(--encre);
+  background:
+    /* taches et vieillissement du parchemin (dégradés radiaux superposés) */
+    radial-gradient(circle at 18% 22%, rgba(138,106,60,.18), transparent 38%),
+    radial-gradient(circle at 82% 12%, rgba(138,106,60,.14), transparent 40%),
+    radial-gradient(circle at 70% 88%, rgba(90,64,30,.20), transparent 45%),
+    radial-gradient(circle at 30% 75%, rgba(160,130,80,.12), transparent 42%),
+    linear-gradient(150deg, var(--parchemin), var(--parchemin-fonce));
+  background-attachment:fixed;
+  overflow:hidden; /* la frise gère son propre défilement */
+  overscroll-behavior:none; /* évite le « tirer pour rafraîchir » sur mobile */
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Disposition générale : en-tête / outils / corps en colonne */
+.codex{
+  display:flex; flex-direction:column;
+  height:100vh;
+}
+
+/* ── EN-TÊTE ────────────────────────────────────────────────────────────── */
+.codex-entete{
+  position:relative;
+  text-align:center;
+  padding:14px 16px 12px;
+  background:linear-gradient(180deg, var(--bleu-nuit), var(--bleu-nuit-clair));
+  color:var(--ivoire);
+  border-bottom:3px solid var(--or);
+  box-shadow:var(--ombre-douce);
+  flex:0 0 auto;
+}
+.codex-entete::before,
+.codex-entete::after{ /* filets dorés décoratifs */
+  content:""; position:absolute; left:18px; right:18px; height:1px;
+  background:linear-gradient(90deg, transparent, var(--or), transparent);
+}
+.codex-entete::before{ top:6px; }
+.codex-entete::after{ bottom:6px; }
+.codex-titre{
+  font-family:var(--police-titre); font-weight:700;
+  letter-spacing:.14em; margin:0;
+  font-size:clamp(20px, 3.2vw, 34px);
+  color:var(--or-clair);
+  text-shadow:0 1px 0 #000, 0 0 14px rgba(200,160,42,.35);
+}
+.codex-sous-titre{
+  font-style:italic; opacity:.82; margin:.25em 0 0;
+  font-size:clamp(12px, 1.6vw, 15px); letter-spacing:.04em;
+}
+
+/* ── BARRE D'OUTILS ─────────────────────────────────────────────────────── */
+.barre-outils{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  padding:10px 16px;
+  background:linear-gradient(180deg, var(--parchemin), var(--parchemin-fonce));
+  border-bottom:2px solid var(--bronze);
+  flex:0 0 auto;
+}
+
+/* Recherche */
+.recherche{ position:relative; }
+.recherche input{
+  font-family:var(--police-corps); font-size:15px;
+  padding:8px 32px 8px 12px; width:230px; max-width:50vw;
+  color:var(--encre); background:var(--ivoire);
+  border:1px solid var(--bronze); border-radius:var(--rayon);
+  outline:none;
+}
+.recherche input:focus{ border-color:var(--or); box-shadow:0 0 0 2px rgba(200,160,42,.35); }
+.recherche .loupe{
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  color:var(--bronze); pointer-events:none; font-size:15px;
+}
+
+/* Filtres par catégorie (puces) */
+.filtres{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.filtre-puce{
+  display:inline-flex; align-items:center; gap:6px;
+  font-family:var(--police-corps); font-size:13px; letter-spacing:.02em;
+  padding:5px 11px 5px 8px;
+  background:var(--ivoire); color:var(--encre);
+  border:1.5px solid var(--cat, var(--bronze)); border-radius:999px;
+  cursor:pointer; user-select:none;
+  transition:background .15s, opacity .15s, transform .1s;
+}
+.filtre-puce .pastille{
+  width:11px; height:11px; border-radius:50%;
+  background:var(--cat, var(--bronze)); flex:0 0 auto;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.2);
+}
+.filtre-puce[aria-pressed="false"]{ opacity:.4; }      /* catégorie masquée */
+.filtre-puce:hover{ transform:translateY(-1px); }
+.filtre-puce:focus-visible{ outline:2px solid var(--or); outline-offset:2px; }
+
+/* Boutons génériques (zoom, présent, tout afficher…) */
+.btn{
+  font-family:var(--police-titre); font-size:12px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase;
+  padding:7px 12px; cursor:pointer;
+  color:var(--ivoire);
+  background:linear-gradient(180deg, var(--bronze-clair), var(--bronze));
+  border:1px solid #6b5024; border-radius:var(--rayon);
+  box-shadow:var(--ombre-douce);
+  transition:filter .15s, transform .1s;
+}
+.btn:hover{ filter:brightness(1.08); }
+.btn:active{ transform:translateY(1px); }
+.btn:focus-visible{ outline:2px solid var(--or); outline-offset:2px; }
+.btn-rond{ width:36px; height:36px; padding:0; font-size:18px; line-height:1; border-radius:50%; }
+
+.groupe-droite{ margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.compteur{
+  font-family:var(--police-titre); font-size:13px; letter-spacing:.04em;
+  color:var(--bleu-nuit);
+  padding:6px 10px; background:var(--ivoire);
+  border:1px solid var(--bronze); border-radius:var(--rayon);
+  white-space:nowrap;
+}
+.compteur b{ color:var(--bronze); }
+
+/* ── CORPS : panneau latéral + scène de la frise ───────────────────────── */
+.codex-corps{ display:flex; flex:1 1 auto; min-height:0; }
+
+/* Panneau latéral (détails de l'événement sélectionné) */
+.panneau{
+  flex:0 0 var(--largeur-panneau); width:var(--largeur-panneau);
+  background:linear-gradient(180deg, var(--ivoire), var(--parchemin));
+  border-right:2px solid var(--bronze);
+  padding:18px 18px 22px; overflow-y:auto;
+  transition:margin-left .3s ease; /* pour le repli sur ordinateur */
+}
+/* Panneau replié sur ordinateur : il glisse hors champ et rend la place à la frise */
+.panneau.replie{ margin-left:calc(-1 * var(--largeur-panneau) - 4px); }
+.panneau h2{
+  font-family:var(--police-titre); font-weight:600; letter-spacing:.06em;
+  font-size:13px; text-transform:uppercase; color:var(--bronze);
+  margin:0 0 10px; padding-bottom:8px;
+  border-bottom:1px solid var(--parchemin-bord);
+}
+.panneau-vide{ color:var(--encre-pale); font-style:italic; line-height:1.6; }
+
+/* Fiche de détail (réutilisée dans le panneau ET dans la fenêtre modale) */
+.fiche-annee{
+  font-family:var(--police-titre); font-weight:700; font-size:30px;
+  color:var(--bleu-nuit); line-height:1;
+}
+.fiche-annee small{ font-size:14px; font-weight:500; color:var(--bronze); letter-spacing:.1em; }
+.fiche-titre{
+  font-family:var(--police-titre); font-weight:600; font-size:19px;
+  color:var(--encre); margin:.5em 0 .35em; line-height:1.25;
+}
+.fiche-cat{
+  display:inline-flex; align-items:center; gap:7px;
+  font-size:12px; letter-spacing:.05em; text-transform:uppercase;
+  font-family:var(--police-titre); font-weight:600;
+  padding:4px 10px; border-radius:999px;
+  color:var(--ivoire); background:var(--cat, var(--bronze));
+}
+.fiche-cat svg{ width:14px; height:14px; fill:currentColor; }
+.fiche-image{
+  margin:14px 0; border:1px solid var(--bronze); border-radius:var(--rayon);
+  background:var(--parchemin-fonce); aspect-ratio:16/9;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--encre-pale); font-style:italic; font-size:13px; overflow:hidden;
+}
+.fiche-image img{ width:100%; height:100%; object-fit:cover; display:block; }
+.fiche-desc{ line-height:1.65; font-size:16px; margin-top:12px; }
+.fiche-sep{ height:1px; margin:16px 0; background:linear-gradient(90deg,transparent,var(--bronze),transparent); }
+
+/* Légende des catégories dans le panneau */
+.legende{ list-style:none; padding:0; margin:0; display:grid; gap:7px; }
+.legende li{ display:flex; align-items:center; gap:9px; font-size:14px; }
+.legende .pastille{ width:13px; height:13px; border-radius:3px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.25); }
+
+/* ── SCÈNE DE LA FRISE ──────────────────────────────────────────────────── */
+.scene{ position:relative; flex:1 1 auto; min-width:0; overflow:hidden; }
+
+/* Le « viewport » masque ; le « plan » est très large et se déplace/zoome */
+.viewport{
+  position:absolute; inset:0; overflow:hidden;
+  cursor:grab;
+  touch-action:none;          /* ESSENTIEL mobile : on gère nous-mêmes glissement/pincement */
+  user-select:none; -webkit-user-select:none; /* pas de sélection de texte pendant le glissement */
+  -webkit-tap-highlight-color:transparent;
+  /* léger voile sombre en haut/bas pour donner de la profondeur */
+  background:
+    linear-gradient(180deg, rgba(26,37,65,.06), transparent 12%, transparent 88%, rgba(26,37,65,.06));
+}
+.viewport.attrape{ cursor:grabbing; }
+.plan{
+  position:absolute; top:0; left:0; height:100%;
+  will-change:transform;
+  /* la transition n'est active que pour les zooms « boutons », pas le drag */
+}
+.plan.anime{ transition:transform .35s cubic-bezier(.22,.61,.36,1); }
+
+/* Axe central horizontal (le « fil du temps ») */
+.axe{
+  position:absolute; left:0; right:0;
+  height:6px;
+  background:linear-gradient(180deg, var(--or-clair), var(--bronze));
+  box-shadow:0 0 0 1px #5a4220, 0 3px 8px rgba(0,0,0,.25);
+  border-radius:3px;
+}
+
+/* Graduations */
+.tick{ position:absolute; transform:translateX(-50%); }
+.tick .trait{ position:absolute; left:50%; transform:translateX(-50%); width:2px; background:var(--bronze); }
+.tick.majeure .trait{ width:3px; background:var(--bleu-nuit); }
+.tick .etiquette{
+  position:absolute; left:50%; transform:translateX(-50%);
+  font-family:var(--police-titre); font-weight:600; white-space:nowrap;
+  color:var(--bleu-nuit);
+}
+.tick.majeure .etiquette{ font-size:14px; }
+.tick.mineure .etiquette{ font-size:11px; color:var(--encre-pale); }
+
+/* Marqueur d'événement (titre vers l'extérieur, connecteur vers l'axe).
+   Ordre DOM des enfants : libelle, annee-mini, sceau, connecteur.
+   • Au-dessus de l'axe (.evt)         : colonne normale → titre en haut (loin
+     de la ligne), connecteur en bas qui rejoint l'axe.
+   • En-dessous de l'axe (.evt.dessous): colonne inversée → connecteur en haut
+     contre l'axe, titre en bas (loin de la ligne). */
+.evt{
+  position:absolute; transform:translateX(-50%);
+  display:flex; flex-direction:column; align-items:center;
+  width:150px;                 /* largeur de référence = CONFIG.largeurEvt */
+  cursor:pointer; text-align:center;
+}
+.evt.dessous{ flex-direction:column-reverse; }
+
+.evt .connecteur{ width:2px; background:var(--bronze); opacity:.7; flex:0 0 auto; }
+.evt .sceau{
+  width:38px; height:38px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--ivoire); background:var(--cat, var(--bronze));
+  border:2px solid var(--ivoire);
+  box-shadow:0 0 0 2px var(--cat, var(--bronze)), var(--ombre-douce);
+  transition:transform .15s, box-shadow .15s;
+  flex:0 0 auto;
+}
+.evt .sceau svg{ width:20px; height:20px; fill:currentColor; }
+.evt .annee-mini{
+  font-size:11px; color:var(--bronze); font-family:var(--police-titre);
+  margin:4px 0 2px; flex:0 0 auto;
+}
+.evt .libelle{
+  font-family:var(--police-titre); font-weight:600; font-size:12.5px;
+  line-height:1.25; color:var(--encre);
+  margin:0 0 6px; max-width:100%;                 /* marge sous le titre = écart avec le sceau */
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  text-shadow:0 1px 0 rgba(246,240,224,.7); flex:0 0 auto;
+}
+/* Sous l'axe, la marge du titre passe au-dessus (toujours côté extérieur) */
+.evt.dessous .libelle{ margin:6px 0 0; }
+.evt.dessous .annee-mini{ margin:2px 0 4px; }
+
+.evt:hover .sceau{ transform:scale(1.12); box-shadow:0 0 0 2px var(--or), 0 0 14px rgba(200,160,42,.6); }
+.evt.actif .sceau{ box-shadow:0 0 0 3px var(--or), 0 0 18px rgba(200,160,42,.8); transform:scale(1.12); }
+.evt:focus-visible{ outline:none; }
+.evt:focus-visible .sceau{ box-shadow:0 0 0 3px var(--or); }
+
+/* ── ÉVÉNEMENT-PÉRIODE : bandeau horizontal (de l'année de début à la fin) ──
+   Se distingue d'un événement ponctuel : barre ornée tendue le long de l'axe,
+   teinte de la catégorie, libellé centré. Cliquable comme un sceau. */
+.periode{
+  position:absolute; box-sizing:border-box;
+  height:30px; padding:0 12px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  cursor:pointer; text-align:center;
+  border:1.5px solid var(--cat, var(--bronze));
+  border-radius:15px;
+  /* fond parcheminé légèrement teinté de la couleur de catégorie */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cat) 26%, var(--ivoire)),
+                            color-mix(in srgb, var(--cat) 14%, var(--ivoire)));
+  box-shadow:var(--ombre-douce), inset 0 0 0 1px rgba(255,255,255,.35);
+  transition:box-shadow .15s, transform .1s;
+}
+.periode .periode-titre{
+  font-family:var(--police-titre); font-weight:600; font-size:13px;
+  color:var(--encre); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.periode .periode-titre svg{ width:15px; height:15px; fill:var(--cat, var(--bronze)); flex:0 0 auto; }
+.periode .periode-annees{
+  font-family:var(--police-titre); font-size:11px; color:var(--cat, var(--bronze));
+  white-space:nowrap; opacity:.9; flex:0 0 auto;
+}
+.periode:hover{ box-shadow:0 0 0 2px var(--or), 0 0 14px rgba(200,160,42,.5); }
+.periode.actif{ box-shadow:0 0 0 3px var(--or), 0 0 18px rgba(200,160,42,.7); }
+.periode:focus-visible{ outline:2px solid var(--or); outline-offset:2px; }
+
+/* ── FENÊTRE MODALE (ouverture au clic sur un événement) ─────────────────── */
+.voile{
+  position:fixed; inset:0; z-index:50;
+  background:rgba(20,14,6,.55); backdrop-filter:blur(2px);
+  display:flex; align-items:center; justify-content:center; padding:20px;
+  opacity:0; pointer-events:none; transition:opacity .25s;
+}
+.voile.ouvert{ opacity:1; pointer-events:auto; }
+.fenetre{
+  position:relative; width:min(560px, 94vw); max-height:88vh; overflow:auto;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(200,160,42,.12), transparent 40%),
+    linear-gradient(160deg, var(--ivoire), var(--parchemin));
+  border:2px solid var(--bronze);
+  border-radius:10px;
+  box-shadow:var(--ombre-forte);
+  padding:26px 28px 28px;
+  transform:translateY(14px) scale(.98);
+  transition:transform .25s cubic-bezier(.22,.61,.36,1);
+}
+.voile.ouvert .fenetre{ transform:translateY(0) scale(1); }
+/* Coins ornés dorés */
+.fenetre::before,.fenetre::after{
+  content:""; position:absolute; width:26px; height:26px;
+  border:2px solid var(--or); pointer-events:none;
+}
+.fenetre::before{ top:8px; left:8px; border-right:0; border-bottom:0; }
+.fenetre::after{ bottom:8px; right:8px; border-left:0; border-top:0; }
+.fermer{
+  position:absolute; top:12px; right:12px;
+  width:32px; height:32px; border-radius:50%;
+  border:1px solid var(--bronze); background:var(--ivoire); color:var(--bronze);
+  font-size:18px; line-height:1; cursor:pointer;
+}
+.fermer:hover{ background:var(--bronze); color:var(--ivoire); }
+.fenetre-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:20px; }
+
+/* ── RESPONSIVE : tablette et plus petit ────────────────────────────────── */
+@media (max-width:880px){
+  /* le panneau latéral se transforme en tiroir coulissant */
+  .panneau{
+    position:absolute; z-index:30; top:0; bottom:0; left:0;
+    box-shadow:var(--ombre-forte);
+    transform:translateX(-105%); transition:transform .3s;
+  }
+  .panneau.ouvert{ transform:translateX(0); }
+  .recherche input{ width:160px; }
+}
+@media (max-width:880px){
+  /* sur mobile, le panneau replié (état ordinateur) ne s'applique pas */
+  .panneau.replie{ margin-left:0; }
+}
+
+/* Accessibilité : respecte la préférence « moins d'animations » */
+@media (prefers-reduced-motion:reduce){
+  *{ animation:none !important; transition:none !important; }
+}
+</style>
+</head>
+
+<body>
+<!-- ╔══════════════════════════════════════════════════════════════════════╗
+     ║  3. STRUCTURE (HTML)                                                  ║
+     ╚══════════════════════════════════════════════════════════════════════╝ -->
+<div class="codex">
+
+  <!-- EN-TÊTE -->
+  <header class="codex-entete">
+    <h1 class="codex-titre">Codex Chronologique d'Ornyrak</h1>
+    <p class="codex-sous-titre">De la Fondation à l'Âge présent — 0 à 1095 A.E.</p>
+  </header>
+
+  <!-- BARRE D'OUTILS -->
+  <div class="barre-outils">
+    <button id="bascule-panneau" class="btn" title="Afficher / masquer le panneau de détails">☰ Panneau</button>
+
+    <div class="recherche">
+      <input id="recherche" type="search" placeholder="Rechercher un événement…" aria-label="Rechercher">
+      <span class="loupe">⌕</span>
+    </div>
+
+    <!-- Les puces de filtre sont générées par le JS d'après l'objet CATEGORIES -->
+    <div class="filtres" id="filtres" role="group" aria-label="Filtres par catégorie"></div>
+    <button class="btn" id="tout-afficher" title="Réafficher toutes les catégories">Tout</button>
+
+    <div class="groupe-droite">
+      <span class="compteur" id="compteur">— <b>0</b> événement —</span>
+      <button class="btn btn-rond" id="zoom-moins" title="Dézoomer" aria-label="Dézoomer">−</button>
+      <button class="btn btn-rond" id="zoom-plus" title="Zoomer" aria-label="Zoomer">+</button>
+      <button class="btn" id="present" title="Revenir à l'année présente (1095 A.E.)">Présent</button>
+    </div>
+  </div>
+
+  <!-- CORPS : panneau + scène -->
+  <div class="codex-corps">
+
+    <!-- PANNEAU LATÉRAL (détails + légende) -->
+    <aside class="panneau" id="panneau">
+      <h2>Détails de l'événement</h2>
+      <div id="panneau-contenu">
+        <p class="panneau-vide">Sélectionne un sceau sur la frise pour révéler le récit de l'événement.</p>
+      </div>
+      <div class="fiche-sep"></div>
+      <h2>Légende des catégories</h2>
+      <ul class="legende" id="legende"></ul>
+    </aside>
+
+    <!-- SCÈNE DE LA FRISE -->
+    <section class="scene">
+      <div class="viewport" id="viewport">
+        <div class="plan" id="plan">
+          <div class="axe" id="axe"></div>
+          <!-- ticks et événements injectés ici par le JS -->
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- FENÊTRE MODALE (réutilise la « fiche » du panneau) -->
+<div class="voile" id="voile" role="dialog" aria-modal="true" aria-label="Détail de l'événement">
+  <div class="fenetre" id="fenetre">
+    <button class="fermer" id="fermer" aria-label="Fermer">×</button>
+    <div id="fenetre-contenu"></div>
+    <div class="fenetre-nav">
+      <button class="btn" id="evt-prec">‹ Précédent</button>
+      <button class="btn" id="evt-suiv">Suivant ›</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  4. DONNÉES — ★ C'EST ICI QUE TU TRAVAILLES ★                          ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+/* ── 4.a CATÉGORIES ───────────────────────────────────────────────────────
+   Chaque catégorie a :
+     • une couleur (n'importe quelle valeur CSS : hex, rgb, hsl…)
+     • un libellé affiché
+     • une icône SVG (collée telle quelle dans le sceau ; fill="currentColor"
+       pour qu'elle prenne la couleur de la catégorie)
+   Pour AJOUTER une catégorie : ajoute une entrée ici, puis utilise sa clé
+   dans le champ « category » de tes événements. Le filtre apparaît tout seul.
+   Pour RECOLORIER : change simplement « couleur ».
+*/
+const CATEGORIES = {
+  politique:   { libelle:"Politique",   couleur:"#2c3a63", icone:`<svg viewBox="0 0 24 24"><path d="M3 9l3.5 4L12 5l5.5 8L21 9l-1.6 9H4.6L3 9zm1.8 11h14.4v1.6H4.8V20z"/></svg>` },
+  guerre:      { libelle:"Guerre",      couleur:"#9b2d2d", icone:`<svg viewBox="0 0 24 24"><path d="M6.9 3 3 6.9l9 9 1.5-1.5-9-9zM21 3l-6.4 6.4 1.4 1.4L22.4 4.4 21 3zM3 19.6 4.4 21l6.4-6.4-1.4-1.4L3 19.6zm11.1-3.7 9 9-3.9-.0-9-9 1.5-1.5z"/></svg>` },
+  religion:    { libelle:"Religion",    couleur:"#c8a02a", icone:`<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3 1.6 4.9H18l-3.6 2.6L15.9 18 12 14.9 8.1 18l1.5-5.5L6 9.9h4.4L12 5z"/></svg>` },
+  commerce:    { libelle:"Commerce",    couleur:"#6e4fa3", icone:`<svg viewBox="0 0 24 24"><path d="M12 2l1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7L12 2zm6.5 11 .9 3 .9-3 3-.9-3-.9-.9-3-.9 3-3 .9 3 .9zM5 16l.7 2.3L8 19l-2.3.7L5 22l-.7-2.3L2 19l2.3-.7L5 16z"/></svg>` },
+  catastrophe: { libelle:"Catastrophe", couleur:"#b5571b", icone:`<svg viewBox="0 0 24 24"><path d="M12 2c1 3-1.5 4.5-1.5 7A2.5 2.5 0 0 0 13 11c0-1.7 1.5-2.3 1.5-4 2 1.7 3.5 4.2 3.5 7a6 6 0 0 1-12 0c0-3.6 2.5-5.7 4-8 .8-1.2 1.6-2.5 2-4z"/></svg>` },
+  decouverte:  { libelle:"Découverte",  couleur:"#2e7d6b", icone:`<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm3.5 3.5L11 11l-1.5 4.5L13 14l2.5-5.5z"/></svg>` },
+  personnage:  { libelle:"Personnage",  couleur:"#8a6a3c", icone:`<svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-4.4 0-8 2.4-8 5.3V21h16v-1.7c0-2.9-3.6-5.3-8-5.3z"/></svg>` },
+  royaume:     { libelle:"Royaume",     couleur:"#4f6f3a", icone:`<svg viewBox="0 0 24 24"><path d="M4 4v4l2-1 2 1V4h2v4l2-1 2 1V4h2v4l2-1 2 1V4h0v16H4V4zm3 9h10v2H7v-2zm0 4h10v2H7v-2z"/></svg>` }
+};
+
+/* ── 4.b ÉVÉNEMENTS ───────────────────────────────────────────────────────
+   Tableau facile à compléter. Champs d'un événement :
+     year        (obligatoire) : année (de début), entre 0 et 1095 (voir CONFIG)
+     yearEnd     (optionnel)   : année de FIN. Si présent et > year, l'événement
+                                 devient une PÉRIODE affichée en bandeau (ex. les
+                                 Grandes Migrations de 300 à 600). Sinon, point.
+     title       (obligatoire) : titre court
+     category    (obligatoire) : une clé de CATEGORIES ci-dessus
+     description (obligatoire) : texte du récit
+     image       (optionnel)   : URL d'une illustration ; sinon réservé pour plus tard
+
+   Exemples de squelette ci-dessous — REMPLACE-LES par ton histoire.
+   L'ordre n'a pas d'importance : le moteur trie et répartit tout seul.
+*/
+const events = [
+  { year:0,    category:"religion",   title:"Mort de l'Eliskaar",
+    description:"Les textes racontent la mort d'un homme face au créateur pour le salut de l'humanité et du continent d'Ornyrak." },
+  
+  { year:294,  category:"royaume",  title:"Fondation de Drass",
+    description:"Les Nitirtiens migrent de plus en plus proche de Vensys et s'installent de l'autre côté de la rivière Scission " },
+
+  { year:347,    category:"royaume",     title:"Fondation de Beldavur",
+    description:"Installation d'un avant-poste stratégique dans les Midlands pour protéger Vensys des invasions depuis les Plasteaux." },
+
+  { year:375,  category:"royaume",      title:"Fondation de Piarre",
+    description:"Piarre est fondée par une riche famille de noble Mastom qui s'installe dans les riches carrières de fer de l'Est." },
+
+  { year:404,  category:"guerre",  title:"Première Légion Permanente de Vensys",
+    description:"Irisven 1er établit la première légion permanente de Vensys." },
+
+  // ── EXEMPLE DE PÉRIODE : champ « yearEnd » présent → affiché en bandeau ──
+  { year:100, yearEnd:400, category:"royaume", title:"Les Grandes Migrations",
+    description:"Trois siècles durant, les peuples de Nitirte se déplacèrent en masse depuis la côte vers l'intérieur des terres pour fuir le joug des Mastoms et de l'Elis, ainsi que les famines." },
+
+  { year:300, yearEnd:427, category:"royaume", title:"La prospérité Abal",
+    description:"L'établissement de communautés nitirtiennes dans l'Ouest de Vensys, libre du joug mastomique, mène à une période de prospérité au dépend du commerce des grandes puissances. Abal est donc la région des nouveaux villages nitirtiens comme Drass, Coisson, Fronde ou Rhiva." },
+
+  { year:408,  category:"guerre",    title:"La Bataille de Longue-Vue",
+    description:"L'armée de Vensys remporte une victoire décisive contre les pilleurs désorganisés Abales." },
+
+  { year:410,  category:"guerre",       title:"Soumission de Drass",
+    description:"L'armée de vensys soumet les territoires de Drass et soumet la population par des exécutions massives. Le terme Estares est utilisé pour désigner les habitants résistants." },
+
+  { year:412, yearEnd:418, category:"politique", title:"Crise et Famine Abale",
+    description:"Plusieurs conflits internes à la région d'Abal poussent les Estares à diverger leurs efforts de pillage vers les Royaumes Nitirtiens plutôt que vers Vensys." },
+
+  { year:418,  category:"guerre",  title:"La Première Guerre Péninsulaire",
+    description:"Une coalition abale se forme en 418 face à la menace grandissante vensyenne. Miroslav Prestinich s'impose depuis Coisson comme le dirigeant charismatique de la coalition. Se dresse devant lui Daren Irisven, jugé imbattable sur les champs de bataille." },
+
+  { year:427,  category:"guerre",     title:"Fin de la Première Guerre Péninsulaire",
+    description:"Après neuf années de conflit, la Première Guerre Péninsulaire prend fin avec la destruction totale de la région abale et des derniers ressortissants Estares." },
+
+  { year:431, category:"personnage",  title:"Mort de Daren Irisven, Irisven 1er",
+    description:"la mort du grand roi Daren Irisven devient un symbole du début de l'ère vensyenne et de la domination du système Elisval sur la région." },
+
+  { year:450, category:"politique",   title:"La Grande Joie",
+    description:"Première festivité en l'honneur des Irisvens qui se produit à tous les 5 ans. Elle sera récupérée depuis les annales de l'histoire pour l'État Irisvenien moderne." },
+
+   { year:476, category:"religion",  title:"Création de l'Ordre de Louissan",
+    description:"Face à la montée du tenebrisme à Guthram, l'Ordre de Louissan est créé pour promouvoir les valeurs chrétiennes dans la région et défendre Ashbourg." },
+
+  { year:580, category:"découverte",  title:"Premier contact avec les Gorllens",
+    description:"Une espèce habitant dans les forêts tropicales de au Nord-Ouest de la Péninsule." },
+
+  { year:587, category:"commerce",  title:"Fondation de la Première Route Commerciale entre Guthram et Vensys",
+    description:"Le roi Pence III de Guthram autorise la création de la Compagnie Royale Péninsulaire qui s'arroge le commerce bilatéral entre les deux royaumes." },
+
+  { year:603, category:"personnage",  title:"Mort d'Éliza Irisven, la Reine-Mère",
+    description:"L'héritage de la reine-mère Éliza Irisven est celle de prospérité, de découverte et de diversité. L'une des plus grandes souveraines de l'histoire irisvenienne." },
+
+  { year:655, yearEnd:668, category:"guerre",  title:"L'Invasion Gorllens'",
+    description:"La première guerre inter-espèce qui décima un tiers de l'humanité face aux Gorllens. Vensys et Ashbourg réussirent à résister aux prix de plusieurs millions d'hommes et de femmes courgeux." },
+
+  { year:659, category:"catastrophe",  title:"Génocide de Jerham",
+    description:"Après quantre ans de guerre les Gorllens détruisirent Jerham, la capitale de Guthram, et génocidaire 90% de la population." },
+
+  { year:667, category:"catastrophe",  title:"Famine péninsulaire",
+    description:"La guerre contre les Gorllens a éliminé une grande partie des habitants des Plaines d'Or et des parties agricoles des différents empires. Une famine survint alors, entrainant la mort de 1,5 millions d'humains."},
+
+  { year:670, category:"politique",  title:"Création de l'Ordre des Sept",
+    description:"Les sept Mastoms vétérans de la guerre qui se battirent aux côtés des rois dans la guerre contre les Gorllens furent chargés de construire un mur de défense impénétrable entre Derror et Guthram pour que jamais cette invasion ne recommence." },
+ 
+  { year:671, category:"religion",  title:"Baptême d'Irisven VIII",
+    description:"Le légendaire Mèris Irisven est baptisé dans la grande cathédrale de Vensys." },
+
+  { year:676, category:"religion",  title:"Le Cristal de Vasa Cara",
+    description:"Survenu après la mort de sa femme, le roi Irisven VIII se vit offrir par l'Elis le cristal de Casa Vara." },
+
+  { year:677, category:"politique",  title:"Union de l'église et de la Couronne, l'ELiskaarisme",
+    description:"Après 6 ans d'entrainement au fadoeum, le roi est nommé par l'Elis comme le Kaar, chef des armées du Nétritentianisme et des Mastoms. Cela a lieu alors que la péninsule est soumise à la superpuissance émergente de la crise qu'est l'empire irisvenien." },
+
+  { year:680, category:"personnage",  title:"Le syndrome Cara",
+    description:"Le roi Irisven VIII n'avait jamais vraiment guérit du deuil de sa femme. Pour effacer sa peine, il se plongea dans les souvenirs de Vasa Cara. Lentement, la femme fantôme du cristal devint une réalité pour le roi qui commença à confondre la réalité et le cristal." },
+
+  { year:702, category:"personnage",  title:"Naissance de Vaheillm Irisven, le Roi-Kaar",
+    description:"Naissance du légendaire Roi-Kaar de la lignée Irisven." },
+
+  { year:870, yearEnd:900, category:"religion",  title:"Le Schisme Nétritentianiste",
+    description:"Un schisme religieux divise les fidèles du Orlynisme et du Tenebrisme. Ce schisme est la source du tenvaliennisme, plaçant l'humain au centre du fatom." },
+
+  { year:889, category:"guerre",  title:"Asssassinat du Kaar",
+    description:"Le Kaar, en mission diplomatique à Vensys, est assassiné par des Dementers." },
+
+  { year:1030, category:"royaume",  title:"Établissement de la Colonie Nouvelle-Vensys",
+    description:"Première colonie dans le Nord de l'Empire Irisvenien, empiétant sur les terres indigènes des Plasteaux" },
+
+  { year:880, yearEnd:1012, category:"politique",  title:"L'Époque Tenvalienne",
+    description:"La grande période du fadoeum. Création de plusieurs courants artistiques et philosophiques." },
+
+  { year:970, category:"découverte",  title:"Les berges du Sud",
+    description:"Le navigateur et explorateur John Sysmate suit pour la première fois les côtes du sud et découvre des terres inhabitées. Il ramène des cristaux par centaine." },
+
+  { year:970, yearEnd:1050, category:"découverte",  title:"Les Expéditions Côtières Irisveniennes",
+    description:"Les expéditions côtières irisveniennes marquent le début de l'ère de colonisation maritime." },
+
+  { year:932, yearEnd:939, category:"politique",  title:"Révolution Tenvalienne",
+    description:"Sept ans de conflit acharné entre les forces sociales tenvaliennes et les forces elisvaliennes. Constitution de l'État Irisvenien." },
+
+  { year:935, yearEnd:955, category:"personnage",  title:"L'Ir Sova Narwhick",
+    description:"Dites la femme de la Révolution, Sova Narwhick est apparue soudainement depuis le peuple comme une dirigeante exceptionnelle, sage et d'une droiture sans égale. Elle a dirigé la Révolution et l'État qui s'en suivi pendant près de vingt ans." },
+
+  { year:942, category:"politique",  title:"Décret du remplacement des écoles elisvaliennes par des écoles tenvaliennes",
+    description:"Afin d'exclure l'influence de l'Elis sur les prochaines générations, Sova Narwhick promulgue un décret obligeant le remplacement des écoles elisvaliennes par des écoles tenvaliennes." },
+
+  { year:937, category:"royaume",  title:"Effondrement des Royaumes Nitirtiens",
+    description:"À la cinquième année de la Révolution Tenvalienne, les royaumes nitirtiens s'effondrent sous la pression interne de sa classe tenvalienne et l'usure de la guerre contre Irisven." },
+    
+  { year:998, yearEnd:1000, category:"guerre",  title:"La révolte des Mastoms",
+    description:"Après presque 60 ans de tensions, d'attentas, de répressions, d'exode et d'appel à l'aide aux royaumes humains, les Mastoms décident de se rallier pour se rebeller aau pouvoir irisvenien depuis son sein. La victoire est consacrée aux tenvaliens, mais la révolte incite les Royaumes Nitirtiens de passer à l'offensive pour affaiblir le pouvoir irisvenien." },
+
+  { year:1000, yearEnd:1003, category:"guerre",  title:"La première Guerre Irisveno-Nitirtienne",
+    description:"Pendant trois ans, les forces irisveniennes et les troupes nitirtiennes s'affrontent sur le grand front de la rivière Scission. La guerre fini dans un statu quo qui affaiblit le pouvoir irisvenien et renforce la confédération Nitirtienne." },
+
+  { year:1030, category:"politique",  title:"Début de la première Exode des Masts",
+    description:"Suivant la première guerre Irisveno-Nitirtienne, de nombreux Mastoms décident de quitter l'Empire Irisvenien pour se réfugier dans d'autres royaumes, ou s'y voient forcé de le faire." },
+
+  { year:1020, yearEnd:1095, category:"politique",  title:"La Colonisation Irisvenienne",
+    description:"Grande période actuelle de colonisation du continent par l'Empire Irisvenien." },
+
+  { year:1030, category:"royaume",  title:"Établissement de la Colonie Nouvelle-Vensys",
+    description:"Première colonie dans le Nord de l'Empire Irisvenien, empiétant sur les terres indigènes des Plasteaux" },
+
+  { year:950, yearEnd:1095, category:"découverte",  title:"Révolution industrielle",
+    description:"La Révolution Industrielle prit naissance dans les grandes usines de mémorisation cristallique d'Irisven. L'innovation acquise depuis les universités" },
+  
+  { year:1059, yearEnd:1064, category:"guerre",  title:"La Guerre Civile Irisvenienne",
+    description:"100 ans après la Révolution Tenvalienne, et un peu plus de 60 ans après la Révolte des Mastoms, les tensions accumulées entre les différents groupes sociaux soumis aux pressions nationalistes irisveniennes, éclatent dans une guerre fratricide de 5 ans." },
+
+  { year:1020, category:"politique",  title:"Début de la seconde Exode des Masts",
+    description:"Terme abrégé et péjoratif pour désigner les Mastoms, les Masts fuient les terres de l'Empire Irisvenien en masse une bonne fois pour toute pour se réfugier principalement à Ashbourg." },
+
+  { year:1065, yearEnd:1085, category:"commercial",  title:"Les 20 Glorieuses",
+    description:"L'empire Irisvenien connaît une période de prospérité économique exceptionnelle. Plusieurs innovations technologiques ont été développées pendant cette période." },
+
+  { year:1079, category:"personnage",  title:"Arrivée de James Nava dans les Plaines d'Or",
+    description:"Suivant des pressions agricoles dans l'empire, en raison de l'explosion démographique et de la demande des industries, Irisven trouve dans les Plaines d'Or un réservoir de ressources quasi-infinie. Pour s'en approprier, elle décide de mettre en place des zones d'influence avec Ashbourg. Du côté irisvenien, un homme est chargé de superviser l'installation militaire irisvenienne dans la région : James E. Nava." },
+
+  { year:1080, category:"politique",  title:"Résistance plainoroise et soumission de Prélaine",
+    description:"Face à l'avancée des deux grandes puissances, les habitants des Plaines d'Or résistent à l'expansion irisvenienne, mais finissent par se soumettre à la domination après un événement tragique manquant au codex." },
+
+  { year: 1051, category:"découverte",  title:"Création du moteur vimique",
+    description:"Après plusieurs années de recherche, les scientiques de Dodécis de l'Université de Vensys, suivant les travaux de Grace Ferrol, développe le premier moteur vimique capable de propulser mécaniquement des trains et des voitures." },
+
+  { year:1092, category:"catastrophe",  title:"La Grande Déception",
+    description:"Se produit, après des années de propérité, la plus grande crise économique de l'histoire de l'Empire Irisvenien, qui contamine rapidement les économies voisines." },
+
+  { year:1095, category:"personnage",  title:"Début de la campagne",
+    description:"Temps présent" },
+];
+
+
+/* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  RÉGLAGES — bornes, zoom, échelle                                      ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+const CONFIG = {
+  anneeMin:        0,      // début de la frise
+  anneeMax:        1095,   // fin de la frise
+  anneePresent:    1095,   // cible du bouton « Présent »
+  suffixeAnnee:    "A.E.", // affiché à côté des années
+
+  gradMajeure:     100,    // graduation majeure (étiquetée) tous les … ans
+  gradMineure:     25,     // graduation mineure tous les … ans
+
+  pxParAnMin:      1.3,    // zoom minimal (px par année) — vue d'ensemble
+  pxParAnMax:      36,     // zoom maximal — vue rapprochée
+  pxParAnInit:     6,      // zoom au démarrage
+  facteurMolette:  0.0016, // sensibilité de la molette
+
+  largeurEvt:      150,    // largeur d'un marqueur ponctuel (doit = .evt {width})
+  ecartEvt:        14,     // espace horizontal minimal entre deux marqueurs
+  // — Disposition verticale : POINTS au-dessus de l'axe, PÉRIODES en dessous —
+  basePoint:       26,     // distance du 1er niveau de points à l'axe
+  hauteurNiveau:   100,    // espacement vertical entre niveaux de points (titre+sceau)
+  basePeriode:     46,     // distance du 1er bandeau à l'axe (sous les étiquettes d'années)
+  hauteurBande:    44,     // espacement vertical entre niveaux de périodes
+  margeAnnees:     70      // marge (en années) à gauche/droite de la frise
+};
+
+
+/* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  5. MOTEUR — (en principe, pas besoin d'y toucher)                     ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+// — Raccourcis DOM —
+const $  = (sel)=>document.querySelector(sel);
+const viewport = $("#viewport");
+const plan     = $("#plan");
+const axe      = $("#axe");
+
+// — État courant —
+let pxParAn   = CONFIG.pxParAnInit; // zoom actuel
+let decalageX = 0;                  // translation horizontale du plan (px)
+let filtresActifs = new Set(Object.keys(CATEGORIES)); // catégories visibles
+let recherche = "";                 // texte de recherche
+let evtSelId  = null;               // id de l'événement sélectionné
+let evtVisibles = [];               // liste des événements actuellement affichés
+
+// On donne un identifiant stable à chaque événement (pour la sélection)
+events.forEach((e,i)=> e._id = i);
+
+// — Conversions année ↔ pixels —
+const largeurPlan = ()=> (CONFIG.anneeMax - CONFIG.anneeMin + CONFIG.margeAnnees*2) * pxParAn;
+const anneeEnX    = (an)=> (an - CONFIG.anneeMin + CONFIG.margeAnnees) * pxParAn;
+const xEnAnnee    = (x )=> x / pxParAn + CONFIG.anneeMin - CONFIG.margeAnnees;
+
+// — Périodes —
+// Un événement est une PÉRIODE s'il possède un champ « yearEnd » supérieur à
+// « year ». Sinon c'est un événement PONCTUEL (un seul point sur la frise).
+const estPeriode  = (e)=> typeof e.yearEnd === "number" && e.yearEnd > e.year;
+const anneeRepr   = (e)=> estPeriode(e) ? (e.year + e.yearEnd)/2 : e.year; // année « centre » (pour recentrer)
+const libelleAnnee= (e)=> estPeriode(e)
+  ? `${e.year} – ${e.yearEnd} ${CONFIG.suffixeAnnee}`   // ex. « 300 – 600 A.E. »
+  : `${e.year} ${CONFIG.suffixeAnnee}`;                 // ex. « 412 A.E. »
+
+// Empreinte horizontale (en pixels) servant à la répartition anti-chevauchement.
+// • périodes : de l'année de début à l'année de fin (avec un minimum lisible)
+// • ponctuels : largeur fixe d'un marqueur centré sur l'année
+function empreintePx(e){
+  if(estPeriode(e)){
+    let d = anneeEnX(e.year), f = anneeEnX(e.yearEnd);
+    // largeur minimale pour que le libellé reste lisible même très dézoomé
+    if(f - d < CONFIG.largeurEvt){ const c=(d+f)/2; d=c-CONFIG.largeurEvt/2; f=c+CONFIG.largeurEvt/2; }
+    return { debut:d - CONFIG.ecartEvt/2, fin:f + CONFIG.ecartEvt/2 };
+  }
+  const x = anneeEnX(e.year), demi = CONFIG.largeurEvt/2 + CONFIG.ecartEvt/2;
+  return { debut:x - demi, fin:x + demi };
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Construction de la barre de filtres et de la légende (une seule fois)
+   ─────────────────────────────────────────────────────────────────────── */
+function construireFiltresEtLegende(){
+  const conteneurFiltres = $("#filtres");
+  const legende = $("#legende");
+  conteneurFiltres.innerHTML = "";
+  legende.innerHTML = "";
+
+  for(const [cle, cat] of Object.entries(CATEGORIES)){
+    // — Puce de filtre —
+    const puce = document.createElement("button");
+    puce.className = "filtre-puce";
+    puce.style.setProperty("--cat", cat.couleur);
+    puce.setAttribute("aria-pressed", "true");
+    puce.dataset.cat = cle;
+    puce.innerHTML = `<span class="pastille"></span>${cat.libelle}`;
+    puce.addEventListener("click", ()=> basculerFiltre(cle, puce));
+    conteneurFiltres.appendChild(puce);
+
+    // — Ligne de légende —
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="pastille" style="background:${cat.couleur}"></span>${cat.libelle}`;
+    legende.appendChild(li);
+  }
+}
+
+function basculerFiltre(cle, puce){
+  if(filtresActifs.has(cle)){ filtresActifs.delete(cle); puce.setAttribute("aria-pressed","false"); }
+  else                       { filtresActifs.add(cle);    puce.setAttribute("aria-pressed","true");  }
+  rendre();
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Graduations (ticks majeurs/mineurs) — recalculées à chaque rendu de zoom
+   ─────────────────────────────────────────────────────────────────────── */
+function construireTicks(){
+  // Supprime les anciens ticks
+  plan.querySelectorAll(".tick").forEach(t=>t.remove());
+
+  const hauteur = viewport.clientHeight;
+  const axeY = hauteur/2;          // l'axe est au centre vertical
+  axe.style.top = axeY + "px";
+
+  for(let an = CONFIG.anneeMin; an <= CONFIG.anneeMax; an += CONFIG.gradMineure){
+    const majeure = (an % CONFIG.gradMajeure === 0);
+    const tick = document.createElement("div");
+    tick.className = "tick " + (majeure ? "majeure" : "mineure");
+    tick.style.left = anneeEnX(an) + "px";
+    tick.style.top  = "0px";
+    tick.style.height = hauteur + "px";
+
+    const longueur = majeure ? 16 : 9;
+    const trait = document.createElement("div");
+    trait.className = "trait";
+    trait.style.top = (axeY - longueur) + "px";
+    trait.style.height = (longueur*2) + "px";
+    tick.appendChild(trait);
+
+    // Étiquette : toutes les majeures, et les mineures seulement si le zoom le permet
+    if(majeure || pxParAn >= 8){
+      const et = document.createElement("div");
+      et.className = "etiquette";
+      et.style.top = (axeY + longueur + 6) + "px";
+      et.textContent = an + (majeure ? " " + CONFIG.suffixeAnnee : "");
+      tick.appendChild(et);
+    }
+    plan.appendChild(tick);
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Filtrage des événements selon catégories actives + recherche
+   ─────────────────────────────────────────────────────────────────────── */
+function filtrer(){
+  const q = recherche.trim().toLowerCase();
+  return events.filter(e=>{
+    if(!filtresActifs.has(e.category)) return false;
+    if(q){
+      const champ = (e.title + " " + (e.description||"")).toLowerCase();
+      if(!champ.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Répartition anti-chevauchement (« lane packing »)
+   On trie par année, puis on place chaque marqueur sur le premier niveau
+   dont la dernière occupation se termine avant le début du marqueur courant.
+   Les niveaux sont ensuite disposés alternativement au-dessus / en-dessous
+   de l'axe → aucun chevauchement possible, densité doublée, lisibilité OK.
+   ─────────────────────────────────────────────────────────────────────── */
+function repartirNiveaux(liste){
+  const tries = [...liste].sort((a,b)=> a.year - b.year);
+  const finDesNiveaux = []; // finDesNiveaux[i] = position x de fin du niveau i
+
+  for(const e of tries){
+    const { debut, fin } = empreintePx(e);   // empreinte réelle (point OU période)
+    let niveau = 0;
+    while(niveau < finDesNiveaux.length && finDesNiveaux[niveau] > debut) niveau++;
+    finDesNiveaux[niveau] = fin;
+    e._niveau = niveau;
+  }
+  return tries;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Rendu complet : ticks + événements + compteur
+   ─────────────────────────────────────────────────────────────────────── */
+function rendre(){
+  // dimensions du plan
+  plan.style.width = largeurPlan() + "px";
+
+  construireTicks();
+
+  // efface les anciens marqueurs
+  plan.querySelectorAll(".evt, .periode").forEach(n=>n.remove());
+
+  const hauteur = viewport.clientHeight;
+  const axeY = hauteur/2;
+
+  // On sépare les deux familles et on les empile indépendamment :
+  //   • POINTS   → toujours AU-DESSUS de l'axe
+  //   • PÉRIODES → toujours EN DESSOUS de l'axe (sous les étiquettes d'années)
+  const listeFiltree = filtrer();
+  const points   = repartirNiveaux(listeFiltree.filter(e=>!estPeriode(e)));
+  const periodes = repartirNiveaux(listeFiltree.filter(e=> estPeriode(e)));
+  evtVisibles = points.concat(periodes);
+
+  for(const e of evtVisibles){
+    const cat = CATEGORIES[e.category] || { couleur:"var(--bronze)", icone:"", libelle:e.category };
+
+    // Côté fixé par le type, et empilement direct vers l'extérieur (niveau 0,1,2…)
+    const distance = estPeriode(e)
+      ? CONFIG.basePeriode + e._niveau * CONFIG.hauteurBande   // bandeaux, vers le bas
+      : CONFIG.basePoint   + e._niveau * CONFIG.hauteurNiveau; // sceaux, vers le haut
+
+    const node = document.createElement("div");
+    node.style.setProperty("--cat", cat.couleur);
+    node.dataset.id = e._id;          // identifiant stable pour la surbrillance
+    node.tabIndex = 0;
+    node.setAttribute("role","button");
+    node.setAttribute("aria-label", libelleAnnee(e) + " — " + e.title);
+
+    if(estPeriode(e)){
+      // ── ÉVÉNEMENT-PÉRIODE : bandeau horizontal du début à la fin (EN BAS) ──
+      let xd = anneeEnX(e.year), xf = anneeEnX(e.yearEnd);
+      if(xf - xd < CONFIG.largeurEvt){ const c=(xd+xf)/2; xd=c-CONFIG.largeurEvt/2; xf=c+CONFIG.largeurEvt/2; }
+
+      node.className = "periode" + (e._id===evtSelId ? " actif" : "");
+      node.style.left  = xd + "px";
+      node.style.width = (xf - xd) + "px";
+      node.innerHTML =
+        `<span class="periode-titre">${cat.icone}${echapper(e.title)}</span>` +
+        `<span class="periode-annees">${e.year} – ${e.yearEnd}</span>`;
+
+      node.style.top = (axeY + distance) + "px"; node.style.bottom = "auto";
+
+    }else{
+      // ── ÉVÉNEMENT PONCTUEL : sceau + titre vers le haut ──
+      node.className = "evt" + (e._id===evtSelId ? " actif" : "");
+      node.style.left = anneeEnX(e.year) + "px";
+      node.innerHTML =
+        `<div class="libelle">${echapper(e.title)}</div>` +
+        `<div class="annee-mini">${e.year}</div>` +
+        `<div class="sceau">${cat.icone}</div>` +
+        `<div class="connecteur" style="height:${distance}px"></div>`;
+      node.style.bottom = (hauteur - axeY) + "px"; node.style.top = "auto";
+    }
+
+    node.addEventListener("click", ()=>{ if(aGlisse) return; selectionner(e._id, true); });
+    node.addEventListener("keydown", (ev)=>{ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); selectionner(e._id, true);} });
+
+    plan.appendChild(node);
+  }
+
+  // compteur
+  const n = evtVisibles.length;
+  $("#compteur").innerHTML = `— <b>${n}</b> événement${n>1?"s":""} —`;
+
+  appliquerTransform();
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Déplacement / zoom : application de la transform + bornage
+   ─────────────────────────────────────────────────────────────────────── */
+function clampDecalage(){
+  const largeurVue = viewport.clientWidth;
+  const min = Math.min(0, largeurVue - largeurPlan()); // ne pas dépasser à droite
+  if(decalageX > 0) decalageX = 0;                      // ni à gauche
+  if(decalageX < min) decalageX = min;
+}
+function appliquerTransform(){
+  clampDecalage();
+  plan.style.transform = `translateX(${decalageX}px)`;
+}
+
+/* Zoom centré sur un point x du viewport (souris ou centre) */
+function zoomer(nouveauPx, ancreX){
+  nouveauPx = Math.max(CONFIG.pxParAnMin, Math.min(CONFIG.pxParAnMax, nouveauPx));
+  if(nouveauPx === pxParAn) return;
+  // année actuellement sous l'ancre
+  const anneeAncre = xEnAnnee(ancreX - decalageX);
+  pxParAn = nouveauPx;
+  rendre();                            // re-répartit avec le nouveau zoom
+  // on replace l'ancre sur la même année
+  decalageX = ancreX - anneeEnX(anneeAncre);
+  appliquerTransform();
+}
+
+/* Centrer la vue sur une année donnée */
+function centrerSurAnnee(an, anime){
+  if(anime) plan.classList.add("anime");
+  decalageX = viewport.clientWidth/2 - anneeEnX(an);
+  appliquerTransform();
+  if(anime) setTimeout(()=>plan.classList.remove("anime"), 400);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Sélection d'un événement → panneau + fenêtre modale
+   ─────────────────────────────────────────────────────────────────────── */
+function ficheHTML(e){
+  const cat = CATEGORIES[e.category] || { couleur:"var(--bronze)", icone:"", libelle:e.category };
+  const image = e.image
+    ? `<div class="fiche-image"><img src="${e.image}" alt="${echapper(e.title)}"></div>`
+    : `<div class="fiche-image">Illustration à venir</div>`; // emplacement image futur
+  // Affiche « 300 – 600 A.E. » pour une période, « 412 A.E. » sinon.
+  const enTeteAnnee = estPeriode(e)
+    ? `${e.year} – ${e.yearEnd}<small> ${CONFIG.suffixeAnnee}</small>`
+    : `${e.year}<small> ${CONFIG.suffixeAnnee}</small>`;
+  return `
+    <div class="fiche-annee">${enTeteAnnee}</div>
+    <div class="fiche-titre">${echapper(e.title)}</div>
+    <span class="fiche-cat" style="--cat:${cat.couleur}">${cat.icone}${cat.libelle}</span>
+    ${image}
+    <div class="fiche-desc">${echapper(e.description||"")}</div>
+  `;
+}
+
+function selectionner(id, ouvrirFenetre){
+  evtSelId = id;
+  const e = events.find(x=>x._id===id);
+  if(!e) return;
+
+  // met à jour le panneau latéral
+  $("#panneau-contenu").innerHTML = ficheHTML(e);
+
+  // met en surbrillance le marqueur sélectionné (point OU période)
+  rendreEtatActif();
+
+  if(ouvrirFenetre){
+    $("#fenetre-contenu").innerHTML = ficheHTML(e);
+    $("#voile").classList.add("ouvert");
+  }
+}
+
+function rendreEtatActif(){
+  // ré-applique la classe .actif en retrouvant chaque marqueur par son data-id
+  plan.querySelectorAll(".evt, .periode").forEach(n=>{
+    n.classList.toggle("actif", Number(n.dataset.id) === evtSelId);
+  });
+}
+
+/* Navigation Précédent / Suivant dans la fenêtre (par année) */
+function naviguer(sens){
+  if(!evtVisibles.length) return;
+  const ordonne = [...evtVisibles].sort((a,b)=>a.year-b.year || a._id-b._id);
+  let idx = ordonne.findIndex(e=>e._id===evtSelId);
+  idx = (idx + sens + ordonne.length) % ordonne.length;
+  const e = ordonne[idx];
+  selectionner(e._id, true);
+  centrerSurAnnee(anneeRepr(e), true);   // milieu de période, ou année exacte
+}
+
+/* Petit utilitaire : échappe le HTML pour éviter toute injection depuis les textes */
+function echapper(s){
+  return String(s).replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   ÉVÉNEMENTS D'INTERFACE (souris, clavier, boutons)
+   ─────────────────────────────────────────────────────────────────────── */
+
+// Déplacement par glisser-déposer.
+// IMPORTANT : on ne capture le pointeur QU'EN CAS de vrai glissement, sinon la
+// capture détourne le clic et la fenêtre ne s'ouvre jamais.
+let drag  = null;        // état du glissement à un doigt / souris
+let pinch = null;        // état du pincement à deux doigts (mobile/tablette)
+let aGlisse = false;     // vrai si le dernier geste était un glissement (bloque le clic)
+const pointeurs = new Map(); // doigts/souris actuellement posés (id → position)
+
+viewport.addEventListener("pointerdown", (e)=>{
+  pointeurs.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+  if(pointeurs.size === 1){
+    // un seul doigt → glissement horizontal
+    drag = { x:e.clientX, depart:decalageX, id:e.pointerId, bouge:false };
+    aGlisse = false;
+  }else if(pointeurs.size === 2){
+    // deux doigts → pincement ; on abandonne le glissement
+    drag = null;
+    viewport.classList.remove("attrape");
+    const p = [...pointeurs.values()];
+    const rect = viewport.getBoundingClientRect();
+    pinch = {
+      distInit: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), // écartement initial
+      pxInit:   pxParAn,                                       // zoom initial
+      ancreX:   (p[0].x + p[1].x)/2 - rect.left                // point fixe = milieu des doigts
+    };
+    aGlisse = true; // un pincement ne doit pas déclencher de clic
+  }
+});
+
+viewport.addEventListener("pointermove", (e)=>{
+  if(pointeurs.has(e.pointerId)) pointeurs.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+  // — Pincement (priorité) —
+  if(pinch && pointeurs.size >= 2){
+    const p = [...pointeurs.values()];
+    const dist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    if(pinch.distInit > 0) zoomer(pinch.pxInit * (dist / pinch.distInit), pinch.ancreX);
+    return;
+  }
+
+  // — Glissement à un doigt —
+  if(drag){
+    const dx = e.clientX - drag.x;
+    if(!drag.bouge && Math.abs(dx) > 4){
+      drag.bouge = true;
+      viewport.classList.add("attrape");
+      try{ viewport.setPointerCapture(drag.id); }catch(_){}
+    }
+    if(drag.bouge){ decalageX = drag.depart + dx; appliquerTransform(); }
+  }
+});
+
+function finPointeur(e){
+  pointeurs.delete(e.pointerId);
+  if(pointeurs.size < 2) pinch = null;        // fin du pincement dès qu'il reste < 2 doigts
+  if(pointeurs.size === 0){
+    if(drag && drag.bouge) aGlisse = true;    // mémorise pour annuler le clic
+    if(drag){ try{ viewport.releasePointerCapture(drag.id); }catch(_){} }
+    viewport.classList.remove("attrape");
+    drag = null;
+  }
+}
+viewport.addEventListener("pointerup", finPointeur);
+viewport.addEventListener("pointercancel", finPointeur);
+
+// Zoom à la molette (centré sur le curseur)
+viewport.addEventListener("wheel", (e)=>{
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const ancreX = e.clientX - rect.left;
+  const facteur = 1 - e.deltaY * CONFIG.facteurMolette;
+  zoomer(pxParAn * facteur, ancreX);
+}, { passive:false });
+
+// Boutons de zoom (centrés sur le milieu de la vue)
+$("#zoom-plus").addEventListener("click", ()=> zoomer(pxParAn*1.3, viewport.clientWidth/2));
+$("#zoom-moins").addEventListener("click",()=> zoomer(pxParAn/1.3, viewport.clientWidth/2));
+
+// Bouton « Présent »
+$("#present").addEventListener("click", ()=> centrerSurAnnee(CONFIG.anneePresent, true));
+
+// Recherche
+$("#recherche").addEventListener("input", (e)=>{ recherche = e.target.value; rendre(); });
+
+// Tout afficher
+$("#tout-afficher").addEventListener("click", ()=>{
+  filtresActifs = new Set(Object.keys(CATEGORIES));
+  document.querySelectorAll(".filtre-puce").forEach(p=>p.setAttribute("aria-pressed","true"));
+  rendre();
+});
+
+// Fenêtre modale
+$("#fermer").addEventListener("click", fermerFenetre);
+$("#voile").addEventListener("click", (e)=>{ if(e.target.id==="voile") fermerFenetre(); });
+$("#evt-prec").addEventListener("click", ()=> naviguer(-1));
+$("#evt-suiv").addEventListener("click", ()=> naviguer(1));
+document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") fermerFenetre(); });
+function fermerFenetre(){ $("#voile").classList.remove("ouvert"); }
+
+// Bouton panneau : sur ordinateur il replie/déplie le panneau (pour libérer
+// la lecture) ; sur mobile/tablette il ouvre/ferme le tiroir coulissant.
+$("#bascule-panneau").addEventListener("click", ()=>{
+  const panneau = $("#panneau");
+  if(window.innerWidth <= 880){
+    panneau.classList.toggle("ouvert");
+  }else{
+    panneau.classList.toggle("replie");
+    // la largeur de la frise change : on recalcule une fois la transition finie
+    setTimeout(rendre, 320);
+  }
+});
+
+// Recalcul au redimensionnement
+let tempo;
+window.addEventListener("resize", ()=>{ clearTimeout(tempo); tempo=setTimeout(rendre, 120); });
+
+/* ───────────────────────────────────────────────────────────────────────
+   DÉMARRAGE
+   ─────────────────────────────────────────────────────────────────────── */
+construireFiltresEtLegende();
+rendre();
+centrerSurAnnee(CONFIG.anneePresent, false); // ouvre sur l'année présente
+</script>
+</body>
+</html>
